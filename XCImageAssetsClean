@@ -10,7 +10,8 @@ require 'tmpdir'
 class XCImageAssetsCleaner
 
     CONTENTS_FILENAME = 'Contents.json'
-    IMAGES_FOLDER_SUFFIX = '.imageset'
+
+    ImageFolderSuffixes = ['.imageset', '.appiconset', '.launchimage']
 
     CONTENTS_IMAGES_KEY = 'images'
 
@@ -20,7 +21,7 @@ class XCImageAssetsCleaner
     IMAGES_IDIOM_KEY = 'idiom'
     IMAGES_ORIENTATION_KEY = 'orientation'
 
-    KnownSuffixKeys = [IMAGES_SCALE_KEY, IMAGES_FILENAME_KEY, IMAGES_SIZE_KEY, IMAGES_IDIOM_KEY, IMAGES_ORIENTATION_KEY]
+    KnownImageKeys = [IMAGES_SCALE_KEY, IMAGES_FILENAME_KEY, IMAGES_SIZE_KEY, IMAGES_IDIOM_KEY, IMAGES_ORIENTATION_KEY]
 
     def initialize(options)
         @renamedFiles = {}
@@ -30,8 +31,10 @@ class XCImageAssetsCleaner
     def base_image_name_for_directory directoryString
         imageName = directoryString.lines('/').last
 
-        if imageName.end_with?(IMAGES_FOLDER_SUFFIX)
-            imageName = imageName[0..-(IMAGES_FOLDER_SUFFIX.length + 1)]
+        ImageFolderSuffixes.each do |suffix|
+            if imageName.end_with?(suffix)
+                imageName = imageName[0..-(suffix.length + 1)]
+            end
         end
 
         return imageName
@@ -41,7 +44,7 @@ class XCImageAssetsCleaner
         unknownSuffixes = []
 
         imageDict.each do |key, val|
-            if !KnownSuffixKeys.include?(key)
+            if !KnownImageKeys.include?(key)
                 unknownSuffixes << "#{key}=#{val}"
             end
         end
