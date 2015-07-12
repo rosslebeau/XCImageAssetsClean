@@ -3,6 +3,7 @@
 require 'json'
 require 'fileutils'
 require 'optparse'
+require 'tmpdir'
 
 # NameOfImage_29x29_minimum-system-version=7.0_@2x~universal-portrait
 
@@ -100,29 +101,23 @@ class XCImageAssetsCleaner
             fileExt = oldFilename.lines('.').last
 
             newFilename = "#{imageName}.#{fileExt}"
-            newFileString = "#{directoryString}/#{newFilename}"
+            newDirectoryString = directoryString.reverse.chomp(@origDir.reverse).concat(@tempDir.reverse).reverse
+            newFileString = "#{newDirectoryString}/#{newFilename}"
 
-            if @renamedFiles.has_key? oldFileString
-                renamedFileString = @renamedFiles[oldFileString]
-                FileUtils.cp(renamedFileString, newFileString)
-            else
-                
-                begin
-                    File.rename(oldFileString, newFileString)
-                rescue SystemCallError => err
-                    if err.errno == Errno::ENOENT::Errno
-                        puts "File not be found: #{oldFileString}"
-                        puts "Named in #{directoryString}/#{CONTENTS_FILENAME}"
-                        puts
-                    else
-                        raise
-                    end
+            begin
+                FileUtils.cp(oldFileString, newFileString)
+            rescue SystemCallError => err
+                if err.errno == Errno::ENOENT::Errno
+                    puts "File not be found: #{oldFileString}"
+                    puts "Named in #{directoryString}/#{CONTENTS_FILENAME}"
+                    puts
+                else
+                    raise
                 end
-
-                @renamedFiles[oldFileString] = newFileString
             end
 
-            replace_first_occurrence_in_file(oldFilename, newFilename, "#{directoryString}/#{CONTENTS_FILENAME}") 
+            newContentsFileString = "#{newDirectoryString}/#{CONTENTS_FILENAME}"
+            replace_first_occurrence_in_file(oldFilename, newFilename, newContentsFileString) 
         else
             ignore = false
             imageDict.keys.each do |key|
@@ -142,6 +137,15 @@ class XCImageAssetsCleaner
 
     def clean_images_in directoryString
         directoryString.chomp!('/')
+
+        newDirectoryString = directoryString.reverse.chomp(@origDir.reverse).concat(@tempDir.reverse).reverse
+        oldContentsFileString = "#{directoryString}/#{CONTENTS_FILENAME}"
+        newContentsFileString = "#{newDirectoryString}/#{CONTENTS_FILENAME}"
+
+        if !File.exist?(newContentsFileString)
+            FileUtils.cp(oldContentsFileString, newContentsFileString)
+        end
+
         contents = JSON.parse(File.read("#{directoryString}/#{CONTENTS_FILENAME}"))
         contents[CONTENTS_IMAGES_KEY].each do |imageDict|
             clean_image_dict imageDict, directoryString
@@ -150,6 +154,10 @@ class XCImageAssetsCleaner
 
     def clean_directory directoryString
         directoryString.chomp!('/')
+
+        newDirectoryString = directoryString.reverse.chomp(@origDir.reverse).concat(@tempDir.reverse).reverse
+        Dir.mkdir(newDirectoryString)
+
         if File.exist?("#{directoryString}/#{CONTENTS_FILENAME}")
             clean_images_in directoryString
         else
@@ -160,9 +168,27 @@ class XCImageAssetsCleaner
     end
 
     def clean xcassets
-        Dir.glob("#{xcassets}/*/").each do |subdir|
-            clean_directory subdir
-        end
+        Dir.mktmpdir('xc-assets-cleaner') {|dir|
+            @origDir = xcassets
+
+            origDirName = xcassets.lines('/').last
+
+            Dir.mkdir("#{dir}/#{origDirName}", 0700)
+            @tempDir = "#{dir}/#{origDirName}"
+
+            Dir.glob("#{xcassets}/*/").each do |subdir|
+                clean_directory subdir
+            end
+
+            FileUtils.remove_dir(@origDir)
+            FileUtils.cp_r(@tempDir, @origDir.lines('/')[0..-1].join('/'))
+
+            @origDir = nil
+            @tempDir = nil
+
+            puts "#{$PROGRAM_NAME.lines('/').last}: Finished cleaning xcassets: #{xcassets}"
+        }
+        
 
         @renamedFiles = {}
     end
