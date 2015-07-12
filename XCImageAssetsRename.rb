@@ -1,5 +1,6 @@
 require 'json'
 require 'fileutils'
+require 'optparse'
 
 # NameOfImage_29x29_minimum-system-version=7.0_@2x~universal-portrait
 
@@ -18,8 +19,9 @@ class XCImageAssetsCleaner
 
     KnownSuffixKeys = [IMAGES_SCALE_KEY, IMAGES_FILENAME_KEY, IMAGES_SIZE_KEY, IMAGES_IDIOM_KEY, IMAGES_ORIENTATION_KEY]
 
-    def initialize
+    def initialize(options)
         @renamedFiles = {}
+        @options = options
     end
 
     def base_image_name_for_directory directoryString
@@ -118,12 +120,21 @@ class XCImageAssetsCleaner
                 @renamedFiles[oldFileString] = newFileString
             end
 
-            replace_first_occurrence_in_file(oldFilename, newFilename, "#{directoryString}/#{CONTENTS_FILENAME}")
+            replace_first_occurrence_in_file(oldFilename, newFilename, "#{directoryString}/#{CONTENTS_FILENAME}") 
         else
-            puts "Image data does not include filename:"
-            puts "#{directoryString}/#{CONTENTS_FILENAME}"
-            puts imageDict
-            puts
+            ignore = false
+            imageDict.keys.each do |key|
+                if imageDict[key] == @options.ignoredKVPairs[key]
+                    ignore = true
+                end
+            end
+
+            if !ignore
+                puts "Image data does not include filename:"
+                puts "#{directoryString}/#{CONTENTS_FILENAME}"
+                puts imageDict
+                puts
+            end
         end
     end
 
@@ -155,16 +166,53 @@ class XCImageAssetsCleaner
     end
 end
 
+class XCImageAssetsCleanerOptions
+    attr_reader :ignoredKVPairs
+    
+    def initialize
+        @ignoredKVPairs = {'scale' => '1x'}
+    end
+
+    def parse! args
+        optionParser = OptionParser.new do |opts|
+            opts.banner = "Usage: example.rb [options]"
+
+            opts.separator ""
+            opts.separator "Specific options:"
+
+            opts.on("--strict",
+                    "Warns about missing files for all images in a Contents.json.",
+                    "Normally ignores 1x scale") do |strict|
+                if strict
+                    @ignoredKVPairs = {}
+                end
+            end
+        end
+
+        optionParser.parse!(args)
+    end
+end
+
 # Script start
 
 if ARGV.length != 1
     puts "Usage\n\nXCImageAssetsCleaner [/path/to/Images.xcassets]"
 end
 
+options = XCImageAssetsCleanerOptions.new
+options.parse!(ARGV)
+
+if ARGV.length == 0
+    puts 'No XCAssets folder given'
+elsif ARGV.length > 1
+    puts "Options unknown or in wrong order:"
+    puts ARGV
+end
+    
 xcassets = ARGV[0]
 
 if File.exist?(xcassets) && File.directory?(xcassets)
-    cleaner = XCImageAssetsCleaner.new
+    cleaner = XCImageAssetsCleaner.new(options)
     cleaner.clean xcassets
 else
     puts "Given XCAssets folder does not exist"
