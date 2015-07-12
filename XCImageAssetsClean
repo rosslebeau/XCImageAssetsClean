@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 require 'json'
 require 'fileutils'
 require 'optparse'
@@ -171,16 +173,14 @@ class XCImageAssetsCleanerOptions
     
     def initialize
         @ignoredKVPairs = {'scale' => '1x'}
-    end
 
-    def parse! args
-        optionParser = OptionParser.new do |opts|
-            opts.banner = "Usage: example.rb [options]"
+        @optionParser = OptionParser.new do |opts|
+            opts.banner = "Usage: XCImageAssetsCleaner [options] [.xcassets folder]"
 
             opts.separator ""
-            opts.separator "Specific options:"
+            opts.separator "Options:"
 
-            opts.on("--strict",
+            opts.on_tail("--strict",
                     "Warns about missing files for all images in a Contents.json.",
                     "Normally ignores 1x scale") do |strict|
                 if strict
@@ -188,25 +188,25 @@ class XCImageAssetsCleanerOptions
                 end
             end
         end
+    end
 
-        optionParser.parse!(args)
+    def parse! args
+        @optionParser.parse!(args)
+    end
+
+    def help
+        return @optionParser.help
     end
 end
 
 # Script start
 
-if ARGV.length != 1
-    puts "Usage\n\nXCImageAssetsCleaner [/path/to/Images.xcassets]"
-end
-
 options = XCImageAssetsCleanerOptions.new
 options.parse!(ARGV)
 
-if ARGV.length == 0
-    puts 'No XCAssets folder given'
-elsif ARGV.length > 1
-    puts "Options unknown or in wrong order:"
-    puts ARGV
+if ARGV.length != 1
+    puts options.help
+    exit 1
 end
     
 xcassets = ARGV[0]
@@ -214,6 +214,8 @@ xcassets = ARGV[0]
 if File.exist?(xcassets) && File.directory?(xcassets)
     cleaner = XCImageAssetsCleaner.new(options)
     cleaner.clean xcassets
+    exit 0
 else
     puts "Given XCAssets folder does not exist"
+    exit 1
 end
