@@ -1,4 +1,5 @@
 require 'json'
+require 'fileutils'
 
 # NameOfImage_29x29_minimum-system-version=7.0_@2x~universal-portrait
 
@@ -16,6 +17,10 @@ class XCImageAssetsCleaner
     IMAGES_ORIENTATION_KEY = 'orientation'
 
     KnownSuffixKeys = [IMAGES_SCALE_KEY, IMAGES_FILENAME_KEY, IMAGES_SIZE_KEY, IMAGES_IDIOM_KEY, IMAGES_ORIENTATION_KEY]
+
+    def initialize
+        @renamedFiles = {}
+    end
 
     def base_image_name_for_directory directoryString
         imageName = directoryString.lines('/').last
@@ -76,9 +81,9 @@ class XCImageAssetsCleaner
         return baseImageName + imageSuffixes
     end
 
-    def replace_text_in_file(oldText, newText, fileString)
+    def replace_first_occurrence_in_file oldText, newText, fileString
         allText = File.read(fileString)
-        newText = allText.gsub(/#{oldText}/, newText)
+        newText = allText.sub(/#{oldText}/, newText)
         File.open(fileString, "w") { |file| file.puts newText }
     end
 
@@ -93,22 +98,32 @@ class XCImageAssetsCleaner
             newFilename = "#{imageName}.#{fileExt}"
             newFileString = "#{directoryString}/#{newFilename}"
 
-            puts "renaming:"
-            puts "    #{oldFileString}"
-            puts "    #{newFileString}"
-            puts
-            begin
-                File.rename(oldFileString, newFileString)
-            rescue SystemCallError
-                puts "A file named in #{directoryString}/#{CONTENTS_FILENAME} could not be found: #{oldFileString}"
-                puts
-                puts "Aborting..."
-                exit 1
+            if @renamedFiles.has_key? oldFileString
+                renamedFileString = @renamedFiles[oldFileString]
+                FileUtils.cp(renamedFileString, newFileString)
+            else
+                
+                begin
+                    File.rename(oldFileString, newFileString)
+                rescue SystemCallError => err
+                    if err.errno == Errno::ENOENT::Errno
+                        puts "File not be found: #{oldFileString}"
+                        puts "Named in #{directoryString}/#{CONTENTS_FILENAME}"
+                        puts
+                    else
+                        raise
+                    end
+                end
+
+                @renamedFiles[oldFileString] = newFileString
             end
 
-            replace_text_in_file(oldFilename, newFilename, "#{directoryString}/#{CONTENTS_FILENAME}")
+            replace_first_occurrence_in_file(oldFilename, newFilename, "#{directoryString}/#{CONTENTS_FILENAME}")
         else
-            puts 'no key'
+            puts "Image data does not include filename:"
+            puts "#{directoryString}/#{CONTENTS_FILENAME}"
+            puts imageDict
+            puts
         end
     end
 
@@ -123,7 +138,6 @@ class XCImageAssetsCleaner
     def clean_directory directoryString
         directoryString.chomp!('/')
         if File.exist?("#{directoryString}/#{CONTENTS_FILENAME}")
-            puts "cleaning #{directoryString}/#{CONTENTS_FILENAME}"
             clean_images_in directoryString
         else
             Dir.glob("#{directoryString}/*/").each do |subdir|
@@ -136,6 +150,8 @@ class XCImageAssetsCleaner
         Dir.glob("#{xcassets}/*/").each do |subdir|
             clean_directory subdir
         end
+
+        @renamedFiles = {}
     end
 end
 
